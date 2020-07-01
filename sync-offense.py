@@ -1,20 +1,29 @@
-####by CanT####
-####v.2####
+import keyring
 from os import sys, path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-from settings.settings import *
-from lib.qradar_helper import qradar
-from lib.sqlite_helper import sqlite_helper
+from lib.sqlhelper import sqlhelper
+from lib.qrhelper import qrhelper
 from thehive4py.api import TheHiveApi
 from thehive4py.models import Case, CustomFieldHelper, CaseTask, CaseObservable
-
-from lib.logger import logger
-lgr = logger('sync-offense', syslog_logging_server)
+import logging
 
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# # Check offense desc and filter out test offenses using prefix Dummy--xxx--.
+# Enable logging
+from lib.loghelper import loghelper
+logger = loghelper('qradar-thehive-sync')
+
+# #Settings for IBM QRadar
+qr_url="https:/.com/"
+qr_token = keyring.get_password('qr','can')
+api_ver = "12.0"
+
+# #Settings for TheHive
+thehive_url="https://.com:9000"
+thehive_token = keyring.get_password('hive','can')
+
+# # Check offense desc and filter out test offenses using prefix Dummy --xxx--.
 def check_test_offenses(offense_desc):
     test_offense = False
     for i in test_offense_descs:
@@ -22,7 +31,7 @@ def check_test_offenses(offense_desc):
             test_offense = True
     return test_offense
 
-# #Check offense fields -- which we defined in settings.py -- to map observable types
+# #Check offense fields which we defined in settings.py to map observable types
 def offense_observable_mapping(obs_type, obs_src):
     obs_dict = {}
     for k,v in qradar_observable_mapping.items():
@@ -82,6 +91,9 @@ def offense_severity_mapper(magnitude):
     mapper['sev'] = sev
     mapper['tlp'] = tlp
     return mapper
+
+
+
 
 # # Connect to DB, or create a new one.
 lgr.info('Connecting to Sqlite DB:{} in {}'.format(case_db, db_path))
