@@ -15,7 +15,16 @@ from thehive4py.exceptions import TheHiveException, CaseException
 
 
 class CustomJsonEncoder(json.JSONEncoder):
+    """
+    Custom JSON encoder class that takes into account [thehive4py.models.JSONSerializable][] instances and 
+    `datetime.datetime` objects
+    """
     def default(self, o):
+        """
+        Method to serialize [thehive4py.models.JSONSerializable][] objects.
+
+        Used by [thehive4py.models.JSONSerializable.jsonify][] method
+        """
         if isinstance(o, JSONSerializable):
             return o.__dict__
         elif isinstance(o, datetime.datetime):
@@ -25,7 +34,22 @@ class CustomJsonEncoder(json.JSONEncoder):
 
 
 class JSONSerializable(object):
+    """
+    Abstract class of all the models classes. 
+    
+    It defines utility methods called `jsonify` used to get a model object's JSON representation
+    """
+
     def jsonify(self, excludes=[]):
+        """
+        A method that returns a stringyfied JSON representing a model object
+
+        Arguments:
+            excludes (str[]): list of fields to exclude from the returned JSON object.
+
+        Returns:
+            str: the JSON string of the object.
+        """
         data = self.__dict__
 
         for ex in excludes:
@@ -44,6 +68,9 @@ class JSONSerializable(object):
 
 
 class CustomFieldHelper(object):
+    """
+    CustomFieldHelper
+    """
     def __init__(self):
         self.fields = {}
 
@@ -54,45 +81,108 @@ class CustomFieldHelper(object):
         self.fields[name] = custom_field
 
     def add_date(self, name, value):
+        """
+        Add a custom field of type `date`.
+
+        Arguments:
+            name (str): name of the custom field
+            value (int): number of milliseconds representing a timestamp (Example: int(time.time())*1000)
+        
+        """
         self.__add_field('date', name, value)
         return self
 
     def add_string(self, name, value):
+        """
+        Add a custom field of type `string`.
+
+        Arguments:
+            name (str): name of the custom field
+            value (str): value of the custom field
+        
+        """
         self.__add_field('string', name, value)
         return self
 
     def add_boolean(self, name, value):
+        """
+        Add a custom field of type `bool`.
+
+        Arguments:
+            name (str): name of the custom field
+            value (bool): True or False, value of the custom field
+        
+        """
         self.__add_field('boolean', name, value)
         return self
 
     def add_number(self, name, value):
+        """
+        Add a custom field of type `number`.
+
+        Arguments:
+            name (str): name of the custom field
+            value (number): value of the custom field
+        
+        !!! Warning
+            This is method that work for TheHive 3 ONLY
+        """
         self.__add_field('number', name, value)
         return self
 
     def add_integer(self, name, value):
+        """
+        Add a custom field of type `integer`.
+
+        Arguments:
+            name (str): name of the custom field
+            value (int): value of the custom field
+        
+        !!! Warning
+            This is method that work for TheHive 4 ONLY
+        """
         self.__add_field('integer', name, value)
         return self
 
     def add_float(self, name, value):
+        """
+        Add a custom field of type `float`.
+
+        Arguments:
+            name (str): name of the custom field
+            value (float): value of the custom field
+        
+        !!! Warning
+            This is method that work for TheHive 4 ONLY
+        """
         self.__add_field('float', name, value)
         return self
 
     def build(self):
+        """
+        Builds the custom field value dict as expected by TheHive, 
+        maintining the order of the fields, specified by `order`
+
+        Returns:
+            dict: A json representation of the custom fields map
+        """
         return self.fields
 
 
 class CustomField(object):
+    """
+    Model class describing a custom field as defined in TheHive
+
+    Arguments:
+        name (str): name of the custom field
+        reference (str): internal reference name
+        description (str): description of the custom field
+        type (Enum): type of the field, possible values are `string`, `boolean`, `number`, `date`, `integer`, `float`
+        options (Any[]): list of possible values for the field
+        mandatory (bool): True if the field is mandatory
+    """
 
     def __init__(self, **attributes):
-        """
-        Class that represents a single custom field
-        :param name: name of the custom field
-        :param reference: internal reference name
-        :param description: description of the custom field
-        :param type: type of the field, possible values are string, boolean, number or date
-        :param options: list of possible values for the field
-        :param mandatory: True if the field is mandatory
-        """
         self.name = attributes.get('name', None)
         self.reference = attributes.get('name', None)
         self.description = attributes.get('description', None)
@@ -102,7 +192,29 @@ class CustomField(object):
 
 
 class Case(JSONSerializable):
+    """
+    Model class describing a case as defined in TheHive
 
+    Arguments:
+        id (str): Case's id. Default: None
+        title (str): Case's description. Default: None
+        description (str): Case's description. Default: None
+        tlp (Enum): Case's TLP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        pap (Enum): Case's PAP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        severity (Enum): Case's severity: `1`, `2`, `3`, `4` for `LOW`, `MEDIUM`, `HIGH`, `CRTICAL`. Default: `2`
+        flag (bool): Case's flag, `True` to mark the case as important. Default: `False`
+        tags (str[]): List of case tags. Default: `[]`
+        startDate (datetime): Case's start date, the date the case occured. Default: `Now()`
+        template (str): Case template's name. If specified then the case is created using the given template. Default: `None`
+        owner (str): Case's assignee. Default: `None`
+        metrics (JSON): Case metrics collection. A JSON object where keys are defining metric name, and values are defining metric value. Default: `{}`
+        customFields (CustomField[]): A set of CustomField instances, or the result of a CustomFieldHelper.build() method. Default: `{}`
+        tasks (JSON[] / CaseTask[]): Set of taks, defined either as JSON objects or CaseTask instances
+        json (JSON): If the field is not equal to None, the case is instantiated using the JSON value instead of the arguements
+
+    !!! Warning
+        The `metrics` field is available in TheHive 3 only
+    """
     def __init__(self, **attributes):
         defaults = {
             'id': None,
@@ -218,10 +330,10 @@ class CaseHelper:
 
     def update(self, case_id, **attributes):
         """
-        Update a case.        
+        Update a case.
         :param case_id: The ID of the case to update
         :param attributes: key=value pairs of case attributes to update (field=new_value)
-        
+
         :return: The created instance.
         """
 
@@ -243,6 +355,19 @@ class CaseHelper:
 
 
 class CaseTask(JSONSerializable):
+    """
+    Model class describing a case task as defined in TheHive
+
+    Arguments:
+        id (str): Task's id. Default: None
+        title (str): Task's description. Default: None
+        description (str): Task's description. Default: None
+        status (Enum): Task's status: `Waiting`, `InProgress`, `Cancel`, `Completed`. Default: `Waiting`
+        flag (bool): Task's flag, `True` to mark the Task as important. Default: `False`
+        startDate (datetime): Task's start date, the date the task started at. Default: `None`
+        owner (str): Task's assignee. Default: `None`
+        json (JSON): If the field is not equal to None, the Task is instantiated using the JSON value instead of the arguements
+    """
 
     def __init__(self, **attributes):
         if attributes.get('json', False):
@@ -259,6 +384,15 @@ class CaseTask(JSONSerializable):
 
 
 class CaseTaskLog(JSONSerializable):
+    """
+    Model class describing a case task log as defined in TheHive
+
+    Arguments:
+        id (str): Log's id. Default: None
+        message (str): Log's description. Default: None
+        file (str): Log attachment's path. If defined, the task log is created and the file is attached to it. Default: None
+        json (JSON): If the field is not equal to None, the Task is instantiated using the JSON value instead of the arguements
+    """
     def __init__(self, **attributes):
         if attributes.get('json', False):
             attributes = attributes['json']
@@ -269,12 +403,34 @@ class CaseTaskLog(JSONSerializable):
 
 
 class CaseTemplate(JSONSerializable):
+    """
+    Model class describing a case template as defined in TheHive
+
+    Arguments:
+        id (str): Template's id. Default: None
+        titlePrefix (str): Template's title prefix. Default: None
+        description (str): Template's description. Default: None
+        tlp (Enum): Template's TLP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        pap (Enum): Template's PAP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        severity (Enum): Template's severity: `1`, `2`, `3`, `4` for `LOW`, `MEDIUM`, `HIGH`, `CRTICAL`. Default: `2`
+        flag (bool): Template's flag, `True` to mark the case as important when created from a template. Default: `False`
+        tags (str[]): List of template tags. Default: `[]`
+        metrics (JSON): Template metrics collection. A JSON object where keys are defining metric name, and values are defining metric value. Default: `{}`
+        customFields (CustomField[]): A set of CustomField instances, or the result of a CustomFieldHelper.build() method. Default: `{}`
+        tasks (JSON[] / CaseTask[]): Set of taks, defined either as JSON objects or CaseTask instances
+        json (JSON): If the field is not equal to None, the template is instantiated using the JSON value instead of the arguements
+
+    !!! Warning
+        The `metrics` field is available in TheHive 3 only
+    """
+
     def __init__(self, **attributes):
         if attributes.get('json', False):
             attributes = attributes['json']
 
         self.id = attributes.get('id', None)
         self.name = attributes.get('name', None)
+        self.id = attributes.get('id', None)
         self.titlePrefix = attributes.get('titlePrefix', None)
         self.description = attributes.get('description', None)
         self.severity = attributes.get('severity', 2)
@@ -295,6 +451,27 @@ class CaseTemplate(JSONSerializable):
 
 
 class CaseObservable(JSONSerializable):
+    """
+    Model class describing a case observable as defined in TheHive
+
+    Arguments:
+        id (str): Observable's id. Default: None
+        dataType (str): Observable's type, must be a valid type, one of the defined data types in TheHive. Default: None
+        message (str): Observable's description. Default: None
+        tlp (Enum): Case's TLP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        ioc (bool): Observable's ioc flag, `True` to mark an observable as IOC. Default: `False`
+        sighted (bool): Observable's sighted flag, `True` to mark the observable as sighted. Default: `False`
+        tags (str[]): List of observable tags. Default: `[]`
+        data (str): Observable's data:
+
+            - If the `dataType` field is set to `file`, the `data` field should contain a file path to be used as attachment
+            - Otherwise, the `data` value is the observable's value
+        json (JSON): If the field is not equal to None, the observable is instantiated using the JSON value instead of the arguements
+
+    !!! Warning
+        At least, one of `tags` or `message` are required. You cannot create an observable without specifying one of those fields
+    """
+
     def __init__(self, **attributes):
         if attributes.get('json', False):
             attributes = attributes['json']
@@ -315,6 +492,28 @@ class CaseObservable(JSONSerializable):
 
 
 class Alert(JSONSerializable):
+    """
+    Model class describing an alert as defined in TheHive
+
+    Arguments:
+        id (str): Alert's id. Default: None
+        tlp (Enum): Alert's TLP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        severity (Enum): Alert's severity: `1`, `2`, `3`, `4` for `LOW`, `MEDIUM`, `HIGH`, `CRTICAL`. Default: `2`
+        date (datetime): Alert's occur date. Default: `Now()`
+        tags (str[]): List of alert tags. Default: `[]`
+
+        title (str): Alert's description. Default: None
+        type (str): Alert's type. Default: None
+        source (str): Alert's source. Default: None
+        sourceRef (str): Alert's source reference. Used to specify the unique identifier of the alert. Default: None
+        description (str): Alert's description. Default: None
+        customFields (CustomField[]): A set of CustomField instances, or the result of a CustomFieldHelper.build() method. Default: `{}`
+
+        caseTemplate (str): Alert template's name. Default: `None`
+
+        json (JSON): If the field is not equal to None, the Alert is instantiated using the JSON value instead of the arguements
+    """
+
     def __init__(self, **attributes):
         if attributes.get('json', False):
             attributes = attributes['json']
@@ -343,6 +542,23 @@ class Alert(JSONSerializable):
 
 
 class AlertArtifact(JSONSerializable):
+    """
+    Model class describing a alert observable as defined in TheHive
+
+    Arguments:
+        dataType (str): Observable's type, must be a valid type, one of the defined data types in TheHive. Default: None
+        message (str): Observable's description. Default: None
+        tlp (Enum): Case's TLP: `0`, `1`, `2`, `3` for `WHITE`, `GREEN`, `AMBER`, `RED`. Default: `2`
+        ioc (bool): Observable's ioc flag, `True` to mark an observable as IOC. Default: `False`
+        sighted (bool): Observable's sighted flag, `True` to mark the observable as sighted. Default: `False`
+        tags (str[]): List of observable tags. Default: `[]`
+        data (str): Observable's data:
+
+            - If the `dataType` field is set to `file`, the `data` field should contain a file path to be used as attachment
+            - Otherwise, the `data` value is the observable's value
+        json (JSON): If the field is not equal to None, the observable is instantiated using the JSON value instead of the arguements
+    """
+
     def __init__(self, **attributes):
         if attributes.get('json', False):
             attributes = attributes['json']

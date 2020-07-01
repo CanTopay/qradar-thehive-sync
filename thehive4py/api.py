@@ -10,69 +10,58 @@ import warnings
 import json
 import magic
 import requests
-from requests.auth import AuthBase
 
+from thehive4py.auth import BasicAuth, BearerAuth
 from thehive4py.models import CaseHelper
-from thehive4py.query import *
-from thehive4py.exceptions import *
-
-
-class BasicAuth(AuthBase):
-    """
-        A custom authentication class for requests
-
-        :param username: The username to use for the authentication
-        :param password: The password to use for the authentication
-        :param organisation: (Optional) The organisation to use
-    """
-    def __init__(self, username, password, organisation=None):
-        self.username = username
-        self.password = password
-        self.organisation = organisation
-
-    def __call__(self, req):
-        req.headers['Authorization'] = requests.auth._basic_auth_str(self.username, self.password)
-
-        if self.organisation is not None:
-            req.headers['X-Organisation'] = self.organisation
-
-        return req
-
-
-class BearerAuth(AuthBase):
-    """
-        A custom authentication class for requests
-
-        :param api_key: The API Key to use for the authentication
-        :param organisation: (Optional) The organisation to use
-    """
-    def __init__(self, api_key, organisation=None):
-        self.api_key = api_key
-        self.organisation = organisation
-
-    def __call__(self, req):
-        req.headers['Authorization'] = 'Bearer {}'.format(self.api_key)
-
-        if self.organisation is not None:
-            req.headers['X-Organisation'] = self.organisation
-
-        return req
+from thehive4py.query import Parent, Id, And, Eq
+from thehive4py.exceptions import TheHiveException, CaseException, CaseTaskException, CaseTemplateException, AlertException, CaseObservableException, CustomFieldException
 
 
 class TheHiveApi:
 
-    """
-        Python API for TheHive
+    def __init__(self, url: str, principal: str, password=None, proxies={}, cert=True, organisation=None):
+        """
+        Python API client for TheHive.
 
-        :param url: thehive URL
-        :param principal: The username or the API key
-        :param password: The password for basic authentication or None. Defaults to None
-        :param organisation: The organisation against which api calls will be run. Defaults to None
-        :param proxies: The proxy configuration, would have `http` and `https` attributes. Defaults to {}
-    """
+        Arguments:
+            url (str): URL of Thehive instance, including the port. Ex: `http://myserver:9000`
+            principal (str): The API key, or the username if basic authentication is used.
+            password (str): The password for basic authentication or None. Defaults to None
+            proxies (dict): The proxy configuration, would have `http` and `https` attributes. Defaults to {}
+                ```python
+                proxies: {
+                    "http: "http://my_proxy:8080"
+                    "https: "http://my_proxy:8080"
+                }
+                ```
+            cert (bool): Wether or not to enable SSL certificate validation
+            organisation (str): The name of the organisation against which api calls will be run. Defaults to None
 
-    def __init__(self, url, principal, organisation=None, password=None, proxies={}, cert=True):
 
+        ??? note "Examples"
+            === "Basic"
+                Example of simple usage: call TheHive APIs using an API key, without proxy, nor organisation
+
+                ```python
+                api = TheHiveApi('http://my_thehive:9000', 'my_api_key')
+                ```
+
+            === "Full options"
+                Example using all the options: call TheHive APIs using an API key, with orgnisation, proxy and sst certificate
+
+                ```python
+                proxies = {
+                    "http: "http://my_proxy:8080"
+                    "https: "http://my_proxy:8080"
+                }
+                api = TheHiveApi('http://my_thehive:9000',
+                    'my_api_key',
+                    proxies,
+                    True,
+                    'my-org'
+                )
+                ```
+        """
         self.url = url
         self.principal = principal
         self.password = password
@@ -80,7 +69,7 @@ class TheHiveApi:
         self.organisation = organisation
 
         if self.password is not None:
-            self.auth = BasicAuth(self.principal,self.password, self.organisation)
+            self.auth = BasicAuth(self.principal, self.password, self.organisation)
         else:
             self.auth = BearerAuth(self.principal, self.organisation)
 
@@ -91,10 +80,20 @@ class TheHiveApi:
 
     def __find_rows(self, find_url, **attributes):
         """
-            :param find_url: URL of the find api
-            :type find_url: string
-            :return: The Response returned by requests including the list of documents based on find_url
-            :rtype: Response object
+        Private fuction that abstracts the calls to _search API
+
+        Arguments:
+            find_url: URL of the find api
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array representing the list of searched records.
+
+        Raises:
+            TheHiveException
         """
         req = self.url + find_url
 
@@ -119,6 +118,15 @@ class TheHiveApi:
                               proxies=self.proxies, auth=self.auth, verify=self.cert)
 
     def health(self):
+        """
+        Method to call the /api/health endpoint
+
+        Returns:
+            Response object resulting from the API call.
+
+        Raises:
+            TheHiveException: Generic exception if an error occurs
+        """
         req = self.url + "/api/health"
         try:
             return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
@@ -126,6 +134,16 @@ class TheHiveApi:
             raise TheHiveException("Error on retrieving health status: {}".format(e))
 
     def get_current_user(self):
+        """
+        Method to call the /api/current endpoint, returning the current authenticated user.
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of the current user
+
+        Raises:
+            TheHiveException: Generic exception if an error occurs
+        """
+
         req = self.url + "/api/user/current"
         try:
             return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
@@ -135,10 +153,16 @@ class TheHiveApi:
     def create_case(self, case):
 
         """
-        :param case: The case details
-        :type case: Case defined in models.py
-        :return: TheHive case
-        :rtype: requests.Response
+        Create a case
+
+        Arguments:
+            case (Case): Instance of [Case][thehive4py.models.Case]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case
+
+        Raises:
+            CaseException: An error occured during case creation
         """
 
         req = self.url + "/api/case"
@@ -151,9 +175,19 @@ class TheHiveApi:
     def update_case(self, case, fields=[]):
         """
         Update a case.
-        :param case: The case to update. The case's `id` determines which case to update.
-        :param fields: Optional parameter, an array of fields names, the ones we want to update
-        :return:
+
+        Arguments:
+            case (Case): Instance of [Case][thehive4py.models.Case] to update. The case's `id` determines which case to update.
+            fields (Array): Optional parameter, an array of fields names, the ones we want to update
+
+                Updatable fields are: [`title`, `description`, `severity`, `startDate`, `owner`, `flag`, `tlp`, `pap`, `tags`, `status`,
+                `resolutionStatus`, `impactStatus`, `summary`, `endDate`, `metrics`, `customFields`]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case
+
+        Raises:
+            CaseException: An error occured during case creation
         """
         req = self.url + "/api/case/{}".format(case.id)
 
@@ -165,17 +199,23 @@ class TheHiveApi:
         data = {k: v for k, v in case.__dict__.items() if (len(fields) > 0 and k in fields) or (len(fields) == 0 and k in update_keys)}
         try:
             return requests.patch(req, headers={'Content-Type': 'application/json'}, json=data, proxies=self.proxies, auth=self.auth, verify=self.cert)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
             raise CaseException("Case update error: {}".format(e))
 
     def create_case_task(self, case_id, case_task):
 
         """
-        :param case_id: Case identifier
-        :param case_task: TheHive task
-        :type case_task: CaseTask defined in models.py
-        :return: TheHive task
-        :rtype: requests.Response
+        Create a case task
+
+        Arguments:
+            case_id: Case identifier
+            case_task: Instance of [CaseTask][thehive4py.models.CaseTask]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case task
+
+        Raises:
+            CaseTaskException: An error occured during case task creation
 
         """
 
@@ -189,17 +229,28 @@ class TheHiveApi:
 
     def update_case_task(self, task, fields=[]):
         """
-        :Updates TheHive Task
-        :param case: The task to update. The task's `id` determines which Task to update.
-        :return:
+        Update a case task
+
+        Arguments:
+            task (CaseTask): Instance of [CaseTask][thehive4py.models.CaseTask]
+            fields (array): Arry of strings representing CaseTask properties to be updated
+               
+                Updatable fields are: [`title`, `description`, `status`, `order`, `user`, `owner`, `flag`, `endDate`]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case task
+
+        Raises:
+            CaseTaskException: An error occured during case task creation
         """
+
         req = self.url + "/api/case/task/{}".format(task.id)
 
         # Choose which attributes to send
         update_keys = [
             'title', 'description', 'status', 'order', 'user', 'owner', 'flag', 'endDate'
         ]
-        
+
         data = {k: v for k, v in task.__dict__.items() if (
             len(fields) > 0 and k in fields) or (len(fields) == 0 and k in update_keys)}
 
@@ -212,11 +263,17 @@ class TheHiveApi:
     def create_task_log(self, task_id, case_task_log):
 
         """
-        :param task_id: Task identifier
-        :param case_task_log: TheHive log
-        :type case_task_log: CaseTaskLog defined in models.py
-        :return: TheHive log
-        :rtype: requests.Response
+        Create a task log either with an attachement or just with a log message.
+
+        Arguments:
+            task_id (str): Task identifier
+            case_task_log (CaseTaskLocg): Instance of [CaseTaskLog][thehive4py.models.CaseTaskLog]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case
+
+        Raises:
+            CaseException: An error occured during case creation
         """
 
         req = self.url + "/api/case/task/{}/log".format(task_id)
@@ -237,11 +294,17 @@ class TheHiveApi:
     def create_case_observable(self, case_id, case_observable):
 
         """
-        :param case_id: Case identifier
-        :param case_observable: TheHive observable
-        :type case_observable: CaseObservable defined in models.py
-        :return: TheHive observable
-        :rtype: requests.Response
+        Create a case observable
+
+        Arguments:
+            case_id (str): Case identifier
+            case_observable (CaseObservable): Instance of [CaseObservable][thehive4py.models.CaseObservable]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case observable
+
+        Raises:
+            CaseObservableException: An error occured during case observable creation
         """
 
         req = self.url + "/api/case/{}/artifact".format(case_id)
@@ -262,18 +325,24 @@ class TheHiveApi:
                 raise CaseObservableException("Case observable create error: {}".format(e))
         else:
             try:
-                return requests.post(req, headers={'Content-Type': 'application/json'}, data=case_observable.jsonify(), proxies=self.proxies, auth=self.auth, verify=self.cert)
+                return requests.post(req, headers={'Content-Type': 'application/json'}, data=case_observable.jsonify(excludes=['id']), proxies=self.proxies, auth=self.auth, verify=self.cert)
             except requests.exceptions.RequestException as e:
                 raise CaseObservableException("Case observable create error: {}".format(e))
 
     def update_case_observable(self, observable_id, case_observable):
 
         """
-        :param observable_id: Observable identifier
-        :param case_observable: TheHive observable
-        :type case_observable: CaseObservable defined in models.py
-        :return: TheHive observable
-        :rtype: json
+        Update an existing case observable
+
+        Arguments:
+            observable_id: Observable identifier
+            case_observable (CaseObservable): Instance of [CaseObservable][thehive4py.models.CaseObservable]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of the updated case observable
+
+        Raises:
+            CaseObservableException: An error occured during case observable creation
         """
 
         req = self.url + "/api/case/artifact/{}".format(observable_id)
@@ -292,10 +361,18 @@ class TheHiveApi:
 
     def get_case(self, case_id):
         """
-            :param case_id: Case identifier
-            :return: TheHive case
-            :rtype: json
+        Get a case by id
+
+        Arguments:
+            case_id (str): Case identifier
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of the case.
+
+        Raises:
+            CaseException: An error occured during case fetch
         """
+
         req = self.url + "/api/case/{}".format(case_id)
 
         try:
@@ -304,13 +381,36 @@ class TheHiveApi:
             raise CaseException("Case fetch error: {}".format(e))
 
     def find_cases(self, **attributes):
+        """
+        Find cases using sort, pagination and a query
+
+        Arguments:
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of cases.
+
+        Raises:
+            CaseException: An error occured during case search
+        """
         return self.__find_rows("/api/case/_search", **attributes)
 
     def delete_case(self, case_id, force=False):
         """
         Deletes a TheHive case. Unless force is set to True the case is 'soft deleted' (status set to deleted).
-        :param case_id: Case identifier
-        :return: A requests response object.
+
+        Arguments:
+            case_id (str): Id of the case to delete
+            force (bool): True to physically delete the case, False to mark the case as deleted
+
+        Returns:
+            response (requests.Response): Response object including true or false based on the action's success
+
+        Raises:
+            CaseException: An error occured during case deletion
         """
         req = self.url + "/api/case/{}".format(case_id)
         if force:
@@ -322,17 +422,39 @@ class TheHiveApi:
 
     def find_first(self, **attributes):
         """
-            :return: first case of result set given by query
-            :rtype: dict
+        Find cases and return just the first record
+
+        Arguments:
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of the case.
+
+        Raises:
+            CaseException: An error occured during case search
         """
         return self.find_cases(**attributes).json()[0]
 
     def get_case_observables(self, case_id, **attributes):
 
         """
-        :param case_id: Case identifier
-        :return: list of observables
-        ;rtype: json
+        Find observables of a given case identified by its id
+
+        Arguments:
+            case_id (str): Id of the case
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of case observable.
+
+        Raises:
+            CaseObservableException: An error occured during case observable search
         """
 
         req = self.url + "/api/case/artifact/_search"
@@ -362,6 +484,23 @@ class TheHiveApi:
             raise CaseObservableException("Case observables search error: {}".format(e))
 
     def get_case_tasks(self, case_id, **attributes):
+        """
+        Find tasks of a given case identified by its id
+
+        Arguments:
+            case_id (str): Id of the case
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of case task.
+
+        Raises:
+            CaseTaskException: An error occured during case task search
+        """
+
         req = self.url + "/api/case/task/_search"
 
         # Add range and sort parameters
@@ -390,9 +529,16 @@ class TheHiveApi:
 
     def get_linked_cases(self, case_id):
         """
-        :param case_id: Case identifier
-        :return: TheHive case(s)
-        :rtype: json
+        Find related cases of a given case identified by its id
+
+        Arguments:
+            case_id (str): Id of the case
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of related cases.
+
+        Raises:
+            CaseException: An error occured during case links fetch
         """
         req = self.url + "/api/case/{}/links".format(case_id)
 
@@ -403,18 +549,35 @@ class TheHiveApi:
 
     def find_case_templates(self, **attributes):
         """
-            :return: list of case templates
-            :rtype: json
+        Find case templates using a query, sort and pagination
+
+        Arguments:
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of case templates
+
+        Raises:
+            TheHiveException: An error occured during case template search
         """
         return self.__find_rows("/api/case/template/_search", **attributes)
 
     def get_case_template(self, name):
 
         """
-        :param name: Case template name
-        :return: TheHive case template
-        :rtype: json
+        Get a case template by its name
 
+        Arguments:
+            name (str): Case template's name
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the case template
+
+        Raises:
+            CaseTemplateException: An error occured during case template fetch
         """
 
         req = self.url + "/api/case/template/_search"
@@ -434,16 +597,21 @@ class TheHiveApi:
             raise CaseTemplateException("Case template fetch error: {}".format(e))
 
     def create_case_template(self, case_template):
-
         """
-        :param case_template: The case template
-        :type case_template: CaseTemplate defined in models.py
-        :return: TheHive case template
-        :rtype: requests.Reponse
+        Create a case template
+
+        Arguments:
+            case_template (CaseTemplate): Instance of [CaseTemplate][thehive4py.models.CaseTemplate]
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the case template
+
+        Raises:
+            CaseTemplateException: An error occured during case template creation
         """
 
         req = self.url + "/api/case/template"
-        data = case_template.jsonify()
+        data = case_template.jsonify(excludes=['id'])
 
         try:
             return requests.post(req, headers={'Content-Type': 'application/json'}, data=data, proxies=self.proxies, auth=self.auth, verify=self.cert)
@@ -452,18 +620,29 @@ class TheHiveApi:
 
     def _check_if_custom_field_exists(self, custom_field):
         data = {
-                'key': 'reference',
-                'value': custom_field.reference
-            }
+            'key': 'reference',
+            'value': custom_field.reference
+        }
         req = self.url + "/api/list/custom_fields/_exists"
         response = requests.post(req, json=data, proxies=self.proxies, auth=self.auth, verify=self.cert)
         return response.json().get('found', 'False')
 
     def create_custom_field(self, custom_field):
         """
-        This function is available only for TheHive 3
+        Create a custom field
 
-        :param custom_field: CustomField defined in models.py
+        Arguments:
+            custom_field (CustomField): Instance of [CustomField][thehive4py.models.CustomField]
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the case template
+
+        Raises:
+            CustomFieldException: Custom field already exists
+            CustomFieldException: An error occured during custom field creation
+
+        !!! Warning
+            This function is available only for TheHive 3
         """
 
         if self._check_if_custom_field_exists(custom_field):
@@ -480,13 +659,23 @@ class TheHiveApi:
                 }
             }
         req = self.url + "/api/list/custom_fields"
-        return requests.post(req, json=data, proxies=self.proxies, auth=self.auth, verify=self.cert)
+        try:
+            return requests.post(req, json=data, proxies=self.proxies, auth=self.auth, verify=self.cert)
+        except requests.exceptions.RequestException as e:
+            raise CustomFieldException("Custom field create error: {}".format(e))
 
     def get_case_task(self, task_id):
         """
-        :param task_id: Task identifier
-        :return: TheHive task by id
-        :rtype: json
+        Get a case task by its id
+
+        Arguments:
+            task_id (str): Case task identifier
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the case task
+
+        Raises:
+            CaseTaskException: An error occured during case task fetch
         """
 
         req = self.url + "/api/case/task/{}".format(task_id)
@@ -497,9 +686,16 @@ class TheHiveApi:
 
     def get_task_log(self, log_id):
         """
-        :param log_id: Task log identifier
-        :return: TheHive task log by id
-        :rtype: json
+        Get a case task log by its id
+
+        Arguments:
+            log_id (str): Case task log identifier
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the case task log
+
+        Raises:
+            CaseTaskException: An error occured during case task log fetch
         """
 
         req = self.url + "/api/case/task/log/{}".format(log_id)
@@ -509,11 +705,17 @@ class TheHiveApi:
             raise CaseTaskException("Case task logs search error: {}".format(e))
 
     def get_task_logs(self, task_id):
-
         """
-        :param task_id: Task identifier
-        :return: TheHive logs
-        :rtype: json
+        Get logs of a case task by its id
+
+        Arguments:
+            task_id (str): Case task identifier
+
+        Returns:
+            response (requests.Response): Response object including a JSON array representing a list of case task logs
+
+        Raises:
+            CaseTaskException: An error occured during case task log fetch
         """
 
         req = self.url + "/api/case/task/{}/log".format(task_id)
@@ -525,10 +727,16 @@ class TheHiveApi:
     def create_alert(self, alert):
 
         """
-        :param alert: TheHive alert
-        :type alert: Alert defined in models.py
-        :return: TheHive alert
-        :rtype: requests.Response
+        Create an alert. Supports adding observables and custom fields
+
+        Arguments:
+            alert (Alert): Instance of [Alert][thehive4py.models.Alert]
+
+        Returns:
+            response (requests.Response): Response object including a JSON array representing a list of case task logs
+
+        Raises:
+            AlertException: An error occured during alert creation
         """
 
         req = self.url + "/api/alert"
@@ -540,37 +748,60 @@ class TheHiveApi:
 
     def mark_alert_as_read(self, alert_id):
         """
-        Mark an alert as read.
-        :param alert_id: The ID of the alert to mark as read.
-        :return:
+        Mark an alert as read. This sets the status of the alert to `Ignored` if it's not yet promoted to a case.
+
+        Arguments:
+            alert_id (str): Id of the alert
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the alert
+
+        Raises:
+            AlertException: An error occured during alert update
         """
         req = self.url + "/api/alert/{}/markAsRead".format(alert_id)
 
         try:
             return requests.post(req, headers={'Content-Type': 'application/json'}, proxies=self.proxies, auth=self.auth, verify=self.cert)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
             raise AlertException("Mark alert as read error: {}".format(e))
 
     def mark_alert_as_unread(self, alert_id):
         """
-        Mark an alert as unread.
-        :param alert_id: The ID of the alert to mark as unread.
-        :return:
+        Mark an alert as unread. This sets the status of the alert to `New` if it's not yet promoted to a case.
+
+        Arguments:
+            alert_id (str): Id of the alert
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the alert
+
+        Raises:
+            AlertException: An error occured during alert update
         """
         req = self.url + "/api/alert/{}/markAsUnread".format(alert_id)
 
         try:
             return requests.post(req, headers={'Content-Type': 'application/json'}, proxies=self.proxies, auth=self.auth, verify=self.cert)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
             raise AlertException("Mark alert as unread error: {}".format(e))
 
     def update_alert(self, alert_id, alert, fields=[]):
         """
-        Update an alert.
-        :param alert_id: The ID of the alert to update.
-        :param data: The alert to update.
-        :param fields: Optional parameter, an array of fields names, the ones we want to update
-        :return:
+        Update an alert completely or using specified fields
+
+        Arguments:
+            alert_id (str): Id of the alert
+            alert (Alert): Instance of [Alert][thehive4py.models.Alert]
+            fields (Array): Optional parameter, an array of field names, the ones we want to update
+
+                Updatable fields are: [`tlp`, `severity`, `tags`, `caseTemplate`, `title`, `description`, `customFields`]
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the alert
+
+        Raises:
+            AlertException: An error occured during alert update
         """
         req = self.url + "/api/alert/{}".format(alert_id)
 
@@ -587,14 +818,21 @@ class TheHiveApi:
 
         try:
             return requests.patch(req, headers={'Content-Type': 'application/json'}, json=data, proxies=self.proxies, auth=self.auth, verify=self.cert)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
             raise AlertException("Alert update error: {}".format(e))
 
     def get_alert(self, alert_id):
         """
-            :param alert_id: Alert identifier
-            :return: TheHive Alert
-            :rtype: json
+        Get an alert by its id
+
+        Arguments:
+            alert_id (str): Id of the alert
+
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the alert
+
+        Raises:
+            AlertException: An error occured during alert update
         """
         req = self.url + "/api/alert/{}".format(alert_id)
 
@@ -605,17 +843,39 @@ class TheHiveApi:
 
     def find_alerts(self, **attributes):
         """
-            :return: list of Alerts
-            :rtype: json
+        Find alerts using sort, pagination and a query
+
+        Arguments:
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of alerts.
+
+        Raises:
+            AlertException: An error occured during alert search
         """
 
         return self.__find_rows("/api/alert/_search", **attributes)
 
     def update_case_observables(self, observable, fields=[]):
         """
-        :Updates TheHive observable
-        :param observable: The observable details to update
-        :return:
+        Update a case observable
+
+        Arguments:
+            observable (CaseObservable): Instance of [CaseObservable][thehive4py.models.CaseObservable] to update. 
+                The observable's `id` determines which case to update.
+            fields (Array): Optional parameter, an array of fields names, the ones we want to update.
+                
+                Updatable fields are: [`tlp`, `ioc`, `flag`, `sighted`, `tags`, `message`]
+
+        Returns:
+            response (requests.Response): Response object including a JSON description of a case observable
+
+        Raises:
+            CaseObservableException: An error occured during observable update
         """
         req = self.url + "/api/case/artifact/{}".format(observable.id)
 
@@ -633,12 +893,17 @@ class TheHiveApi:
 
     def promote_alert_to_case(self, alert_id, case_template=None):
         """
-            This uses the TheHiveAPI to promote an alert to a case
+        Create a new case from an alert, with an optional case template
 
-            :param alert_id: Alert identifier
-            :param case_template: Optional Case Template name
-            :return: TheHive Case
-            :rtype: json
+        Arguments:
+            alert_id (str): Id of the alert
+            case_template (str): Case template name to apply when creating the cas
+            
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the alert
+
+        Raises:
+            AlertException: An error occured during alert promotion
         """
 
         req = self.url + "/api/alert/{}/createCase".format(alert_id)
@@ -654,12 +919,19 @@ class TheHiveApi:
         return None
 
     def run_analyzer(self, cortex_id, artifact_id, analyzer_id):
-
         """
-        :param cortex_id: identifier of the Cortex server
-        :param artifact_id: identifier of the artifact as found with an artifact search
-        :param analyzer_id: name of the analyzer used by the job
-        :rtype: json
+        Create a new case from an alert, with an optional case template
+
+        Arguments:
+            cortex_id: identifier of the Cortex server
+            artifact_id: identifier of the artifact as found with an artifact search
+            analyzer_id: name of the analyzer used by the job
+            
+        Returns:
+            response (requests.Response): Response object including a JSON representation of the analysis job
+
+        Raises:
+            TheHiveException: An error occured during job creation
         """
 
         req = self.url + "/api/connector/cortex/job"
@@ -675,8 +947,19 @@ class TheHiveApi:
 
     def find_tasks(self, **attributes):
         """
-            :return: list of Tasks
-            :rtype: json
+        Find case tasks using sort, pagination and a query
+
+        Arguments:
+            query (dict): A query object, defined in JSON format or using utiliy methods from thehive4py.query module
+            sort (Array): List of fields to sort the result with. Prefix the field name with `-` for descending order
+                and `+` for ascending order
+            range (str): A range describing the number of rows to be returned
+
+        Returns:
+            response (requests.Response): Response object including a JSON array of case tasks.
+
+        Raises:
+            AlertException: An error occured during case task search
         """
 
         return self.__find_rows("/api/case/task/_search", **attributes)
