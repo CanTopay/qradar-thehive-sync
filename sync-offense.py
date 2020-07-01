@@ -1,8 +1,8 @@
 import keyring
 from os import sys, path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-from lib.sqlhelper import sqlhelper
-from lib.qrhelper import qrhelper
+from helpers.sqlhelper import sqlhelper
+from helpers.qrhelper import qrhelper
 from thehive4py.api import TheHiveApi
 from thehive4py.models import Case, CustomFieldHelper, CaseTask, CaseObservable
 import logging
@@ -91,9 +91,6 @@ def offense_severity_mapper(magnitude):
     mapper['sev'] = sev
     mapper['tlp'] = tlp
     return mapper
-
-
-
 
 # # Connect to DB, or create a new one.
 lgr.info('Connecting to Sqlite DB:{} in {}'.format(case_db, db_path))
