@@ -126,8 +126,8 @@ class sqlhelper(object):
             logger.error('Could not connect to database during check_exrecord.')
         return result
 
-sl = sqlhelper("qradar-sync.db")
-print(sl.run_qry("Select * from cases"))
+# sl = sqlhelper("qradar-sync.db")
+# print(sl.run_qry("Select * from cases"))
 # sl.create_table('table1', 'id INTEGER PRIMARY KEY, col1 TEXT, col2 TEXT')
 # sl.insert_record('table1', 'id, col1, col2', '"1","2","3"')
 # sl.update_record('table1','col2','4','id','1')
