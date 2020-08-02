@@ -1,21 +1,18 @@
 # qradar-thehive-sync
-A cron based, old school integration for syncing QRadar offenses to the TheHive cases.
+A cron type, script based integration for IBM QRadar and TheHive.
+While playing around with theHive in my demo env.(community edt. of QRadar), I wrote this python script for a local cron based offense sync.
+Also added some supporting libraries for Qradar calls, etc. Feel free to use, make better and share.
 
 This package includes;
-
-# qrhelper
-A nifty helper class for simplfying common operations on IBM QRadar SIEM API.
+# qrhelper (Qradar Helper)
+A tidy helper class for simplfying common ops on IBM QRadar.
 https://github.com/CanTopay/qrhelper
 
-# thehive-playbook-creator
-A script to create and assign SOP tasks dynamically to the cases.
-https://github.com/CanTopay/thehive-playbook-creator
-
-# TheHive4py
-This integration script uses TheHive4py python API client implementation of TheHive project.
-Please find the details in their repo: https://github.com/TheHive-Project/TheHive4py
-
 # loghelper and sqlhelper
-Everyone have his own way of doing things. I like tidy helpers, that's why.
-.An helper for logging and formatting.
+Well, I like helpers.
+.An helper for logging.
 .An helper for sqlite ops.
+
+# thehive-playbook-creator
+A script to dynamically create and assign SOP tasks(playbooks) to the cases.
+https://github.com/CanTopay/thehive-playbook-creator

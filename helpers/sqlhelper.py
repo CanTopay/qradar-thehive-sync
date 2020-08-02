@@ -1,9 +1,6 @@
 import sqlite3
 from os import sys, path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-import logging
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Enable logging
 from helpers.loghelper import loghelper
@@ -46,6 +43,20 @@ class sqlhelper(object):
                     sys.exit(1)
         else:
             logger.error('Could not initiate the database during create_table:{}'.format(tablename))
+    
+    def create_index(self, idxname, tablename, fields):
+        conn = self.conn
+        # #Give the column defs as comma seperated vals. Exp: sl.create_index('index1', 'table1', 'col1, col2, col3')
+        index_ddl = 'CREATE INDEX IF NOT EXISTS {} ON {} ({});'.format(idxname, tablename, fields)
+        if conn is not None:
+            try:
+                c = conn.cursor()
+                c.execute(index_ddl)
+            except Exception as e:
+                logger.error('Cannot create the index!:{}-{}'.format(idxname, e))
+                conn.close()
+        else:
+            logger.error('Could not initiate DB connection during create_index:{}'.format(tablename))
 
     def run_qry(self, qry):
         conn = self.conn
@@ -71,6 +82,7 @@ class sqlhelper(object):
     def insert_record(self, tablename, cols, vals):
         conn = self.conn
         # #Give the column list/val list in order and format.Exp: sl.insert_record('table1', 'id, col1, col2', '"1","2","3"')
+        # #sl.insert_record(case_table, 'id, case_id, status', '"{}","{}","{}"'.format(offense_id, case_id, 'Open'))
         insert_dml = ('INSERT INTO {} ({}) VALUES ({})'.format(tablename, cols, vals))
         if conn is not None:
             try:
@@ -114,7 +126,8 @@ class sqlhelper(object):
             logger.error('Could not connect to database during check_exrecord.')
         return result
 
-# sl = sqlhelper("test.db")
+sl = sqlhelper("qradar-sync.db")
+print(sl.run_qry("Select * from cases"))
 # sl.create_table('table1', 'id INTEGER PRIMARY KEY, col1 TEXT, col2 TEXT')
 # sl.insert_record('table1', 'id, col1, col2', '"1","2","3"')
 # sl.update_record('table1','col2','4','id','1')
@@ -125,4 +138,4 @@ class sqlhelper(object):
 ##connection = sqlite3.connect('./test.db')
 ##cursor = connection.execute('select * from table1')
 ##print(cursor.description)
-##sl.run_sql("SELECT c.case_id, e.enrichment_id from cases c LEFT OUTER JOIN enrichments e ON c.id = e.id where e.status = 'Open'")
+##sl.run_qry("SELECT c.case_id, e.enrichment_id from cases c LEFT OUTER JOIN enrichments e ON c.id = e.id where e.status = 'Open'")
