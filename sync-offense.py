@@ -25,7 +25,7 @@ offense_start_from = 6
 test_offense_descs = ['Dummy']
 # Put an offense note to the synced offenses, edit the note below.
 offense_note = 'Offense synced to The Hive - Case ID:{}'
-# Qradar  Offense Closing Text that you have - /siem/offense_closing_reasons
+# Qradar Offense Closing Text that you want during offense closing through theHive - use /siem/offense_closing_reasons
 offense_closing_text= 'Non-Issue'
 # Any Qradar property which you want to enrich as an observable, even if it is not part of the offense details/offense source.
 # Use AQL field names only, you can find the names by looking from Log Activity > Advanced Search. Add with corresponding TheHive dataType.
