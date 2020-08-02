@@ -8,35 +8,44 @@ from helpers.sqlhelper import sqlhelper
 from helpers.loghelper import loghelper
 logger = loghelper('qradar-thehive-sync')
 
-
 # #Mandatory Settings ######################
 qr_url='https://qradar'
 qr_token = keyring.get_password('qr','can')
 api_ver = "12.0"
+
 thehive_url="https://thehive"
 thehive_token = keyring.get_password('hive', 'can')
+
 # Maximum count of offenses to query at a time. Just in case, if some QRadar rules goes wild.
 max_count_offenses = 10
+
 # Maximum count of properties to sync as observables,like IPs/Usernames. Just in case,a Ddos etc. may have too many.
 max_event_count = 10
+
 # Offense sync starts below this Offense ID >. You may want to keep some old offenses out of theHive.
 offense_start_from = 6
+
 # Test offense descriptions: put below text(s - list) in any part of your test offense name(case insensitive),those will be ignored.
 test_offense_descs = ['Dummy']
+
 # Put an offense note to the synced offenses, edit the note below.
 offense_note = 'Offense synced to The Hive - Case ID:{}'
+
 # Qradar Offense Closing Text that you want during offense closing through theHive - use /siem/offense_closing_reasons
-offense_closing_text= 'Non-Issue'
-# Any Qradar property which you want to enrich as an observable, even if it is not part of the offense details/offense source.
-# Use AQL field names only, you can find the names by looking from Log Activity > Advanced Search. Add with corresponding TheHive dataType.
-qradar_observable_mapping = {"sourceip": "ip", "destinationip": "ip", "username": "other"}
-# Custom fields to create on theHive, check theHive types.This is just for creating, you need to post the values within the code.
+offense_closing_text = 'Non-Issue'
+
+# Any Qradar property which you want to search and post as an observable when it is not in the offense data/offense source.
+# Use AQL field names, you can find them from Log Activity > Advanced Search. Add with corresponding TheHive dataType.
+qradar_observable_mapping = {"sourceip": "ip", "destinationip": "ip", "hostname": "other"}
+
+# Custom fields to create on theHive, check theHive types.
+# This is just for creating, if you add new fields don't forget to edit the code for their data.
 custom_fields = {
                 "qradar_id":{"desc":"QRadar Offense ID", "type":"number"},
                 "offense_source":{"desc":"QRadar Offense Source", "type":"string"},
                 "qradar_username":{"desc":"QRadar Custom Username", "type":"string"}
                 }
-# #End of Settings #########################
+# ##########################################
 
 
 # #Connect to Qradar
@@ -51,7 +60,7 @@ except Exception as e:
     logger.error('Error at connecting to TheHive:{} Error:{}'.format(thehive_url, e))
     sys.exit(1)
 
-# #Connect to Sqlite DB and tables or create new.
+# #Connect to Sqlite DB and tables or creates all.
 sl = sqlhelper('qradar-sync.db')
 case_table = 'cases'
 enrichment_table = 'enrichments'
@@ -121,7 +130,7 @@ def aql_enrich_qry(field, offense_id):
             .format(field, offense_id, field, max_event_count, offense_start_time, offense_lastupdate_time)
     return aql_qry
 
-# # A dummy sev,tlp assignment for initial case creation - using ONLY offense magnitude.
+# # A dummy-initial sev,tlp assignment using ONLY offense magnitude.
 # severity: (0: not set; 1: low; 2: medium; 3: high) TLP: (-1: unknown; 0: white; 1: green; 2: amber; 3: red)
 #TODO: Triage-assignment severity calculation.
 def offense_severity_mapper(magnitude):
@@ -144,7 +153,7 @@ def offense_severity_mapper(magnitude):
     mapper['tlp'] = tlp
     return mapper
 
-#Check for closed cases from DB before resync.
+#Check for closed cases from theHive before resync.
 get_cases = sl.get_records_by_val(case_table, 'case_id', 'status', 'Open')
 for i in get_cases:
     if hive_api.get_case(i[0]).json()['status'] == 'Resolved':
@@ -170,7 +179,7 @@ if qr_resp is not None:
 if len(new_offense_list) == 0 :
     logger.info('No new offense to sync right now. All good!')
 
-# # Reconn and check-create new cases
+# # Reconn and check/create new cases
 qr = qrhelper(qr_url, qr_token, api_ver)
 for i in new_offense_list:
     print('-------Processing new offense-------:', i)
@@ -221,6 +230,7 @@ for i in new_offense_list:
     # #Remote DIP list from static Offense data
     remote_dest_list = []
     if remote_destination_count >= 1:
+        print(aql_enrich_qry('destinationip', offense_id))
         aql_id = qr.post_aql(aql_enrich_qry('destinationip', offense_id))
         if aql_id:
             sl.insert_record(enrichment_table, 'id, enrichment_id, enrichment_type, status', '"{}","{}","{}","{}"'.format(offense_id, aql_id, 'destinationip', 'Open'))
@@ -295,13 +305,14 @@ for i in new_offense_list:
         if offense_source not in list(observables_dict.values()):
             # Offense source type and val for observables
             off_source_mapping = offense_observable_mapping(offense_type_property, offense_source)
-            if off_source_mapping: # {'ip': '8.8.8.8'}
+            if off_source_mapping:
                 obs_id = create_observables(off_source_mapping, case_id)
                 logger.info('Observable created. Case Id:{} - Obsv.Id:{}'.format(case_id, obs_id))
 
         # Post-Get custom property based obs which we defined in qradar_observable_mapping dict.
         for k, v in qradar_observable_mapping.items():
             if k.lower() != offense_type_property.lower(): ##Offense source already added
+                print(aql_enrich_qry(k,offense_id))
                 aql_id = qr.post_aql(aql_enrich_qry(k,offense_id))
                 if aql_id:
                     sl.insert_record(enrichment_table, 'id, enrichment_id, enrichment_type, status', '"{}","{}","{}","{}"'.format(offense_id, aql_id, k, 'Open'))
@@ -316,8 +327,8 @@ for i in new_offense_list:
                                     sl.update_record(enrichment_table, 'status', 'Closed', 'enrichment_id', aql_id)
                                     logger.info('Observable created. Case Id:{} - Obsv.Id:{}'.format(case_id,obs_id))
 
-# #Check for unfinished AQL queries from Sqlite for previous case enrichments.
-# #Close the enrichment records after update or result set==None, which means property does not in relation with the offense.
+#Check for unfinished AQL queries from Sqlite for previous case enrichments.
+#Close the enrichment records after update or result set==None, which means property does not in relation with the offense.
 chk_aql_dict = {}
 open_enrichments = sl.run_qry("SELECT c.case_id, e.enrichment_id from cases c LEFT OUTER JOIN enrichments e ON c.id = e.id where e.status = 'Open'")
 if len(open_enrichments) > 0:
@@ -328,7 +339,6 @@ if len(open_enrichments) > 0:
             records = qr.get_aql_results(v)
             if records:
                 obs_type = sl.get_records_by_val(enrichment_table, 'enrichment_type', 'enrichment_id', v)[0][0]
-                print(obs_type)
                 retval = parse_get_aql(records, obs_type)
                 if retval:
                     for item in retval:
