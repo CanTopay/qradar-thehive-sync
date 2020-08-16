@@ -273,7 +273,7 @@ for i in new_offense_list:
                                                        local_dest_list, remote_dest_list, username_list, offense_link)
 
     # #Some sample tasks-response actions for posting in the case. Customize per your reqs.
-    # #TODO: You can also utilize - thehive-playbook-creator - for dynamic task/playbook assignment using your QRadar rule groups. 
+    # #TODO: You can also utilize - thehive-playbook-creator - for dynamic task/playbook assignment using your QRadar Rule groups.
     tasks = [CaseTask(title='PB:- Phase:Identification'), CaseTask(title='PB: - Phase:Remediation'), CaseTask(title='PB: - Phase:Lessons Learned', status='Waiting', flag=True)]
 
     #Build TheHive Case with custom fields
