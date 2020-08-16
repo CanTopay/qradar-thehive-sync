@@ -5,7 +5,7 @@ Feel free to use, make better and share.
 
 I also include some supporting libraries(my helpers), for Qradar calls, sqlite db operations, logging  etc.
 
-So, this package includes:
+So, this package also includes:
 # qrhelper (Qradar Helper)
 A tidy helper class for simplfying common ops on IBM QRadar.
 https://github.com/CanTopay/qrhelper
