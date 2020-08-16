@@ -12,8 +12,8 @@ https://github.com/CanTopay/qrhelper
 
 # loghelper and sqlhelper
 Well, I like helpers.
-.An helper for logging.
-.An helper for sqlite ops.
+- An helper for logging.
+- An helper for sqlite ops.
 
 If you also have an interest for automating SOP task assignments (exp. using QRadar Rule groups), have a look at below sample script.
 # thehive-playbook-creator 
@@ -21,5 +21,4 @@ A script to dynamically create and assign tasks(SOP playbooks) into the case.
 https://github.com/CanTopay/thehive-playbook-creator
 
 Requirements:
-- Install Python 3 and then just pip the thehive4py, keyring, sqlite3, json.(Check the imports)
-   
+- Install Python 3 and then just pip the thehive4py, keyring, sqlite3, json.
