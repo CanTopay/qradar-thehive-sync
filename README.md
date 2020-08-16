@@ -20,5 +20,6 @@ If you also have an interest for automating SOP task assignments (exp. using QRa
 A script to dynamically create and assign tasks(SOP playbooks) into the case.
 https://github.com/CanTopay/thehive-playbook-creator
 
-Requirements:
+
+# Requirements:
 - Install Python 3 and then just pip the thehive4py, keyring, sqlite3, json.
