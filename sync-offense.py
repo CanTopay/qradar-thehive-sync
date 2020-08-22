@@ -22,7 +22,7 @@ max_count_offenses = 10
 # Maximum count of properties to sync as observables,like IPs/Usernames. Just in case,a Ddos etc. may have too many.
 max_event_count = 10
 
-# Offense sync starts below this Offense ID >. You may want to keep some old offenses out of theHive.
+# Offense sync starts above this Offense ID >. You may want to keep some old offenses out of theHive.
 offense_start_from = 6
 
 # Test offense descriptions: put below text(s - list) in any part of your test offense name(case insensitive),those will be ignored.
